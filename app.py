@@ -44,7 +44,7 @@ with st.sidebar:
 
     st.markdown("---")
 
-    # --- 一键导出 Excel ---
+            # --- 一键导出排查表 (CSV版，安全无拦截) ---
     st.subheader("📥 一键导出排查表")
     if st.button("生成并下载", type="primary", use_container_width=True):
         data = {
@@ -104,66 +104,40 @@ with st.sidebar:
                 "❌ 乳化→查缸套漏水；银色细屑→活塞环/缸套早期磨损；黑色油泥→氧化严重，需换油并查冷却系统"
             ]
         }
-        df = pd.DataFrame(data)
 
-        output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df.to_excel(writer, index=False, sheet_name='黑烟排查表')
-            wb = writer.book
-            ws = writer.sheets['黑烟排查表']
+        # 把字典转成行，保留原来的列顺序
+        headers = [
+            "序号",
+            "检查项目",
+            "检查方法与要点",
+            "标准值 / 判据",
+            "工具/仪表要求",
+            "风险提示 & 处置建议",
+        ]
+        rows = list(zip(*[data[k] for k in headers]))
 
-            header_font = Font(name='Microsoft YaHei', bold=True, size=11, color='FFFFFF')
-            header_fill = PatternFill(start_color='2C3E50', end_color='2C3E50', fill_type='solid')
-            align_center = Alignment(horizontal='center', vertical='center', wrap_text=True)
-            align_left = Alignment(horizontal='left', vertical='center', wrap_text=True)
-            border = Border(
-                left=Side(style='thin'), right=Side(style='thin'),
-                top=Side(style='thin'), bottom=Side(style='thin')
-            )
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(headers)
+        writer.writerows(rows)
 
-            for col_num, column_title in enumerate(df.columns, 1):
-                cell = ws.cell(row=1, column=col_num)
-                cell.font = header_font
-                cell.fill = header_fill
-                cell.alignment = align_center
-                cell.border = border
-
-            for row_num in range(2, len(df) + 2):
-                for col_num, column_title in enumerate(df.columns, 1):
-                    cell = ws.cell(row=row_num, column=col_num)
-                    cell.alignment = align_left if column_title in ["检查方法与要点", "标准值 / 判据", "工具/仪表要求", "风险提示 & 处置建议"] else align_center
-                    cell.border = border
-
-            for column in ws.columns:
-                max_length = 0
-                column_letter = get_column_letter(column[0].column)
-                for cell in column:
-                    try:
-                        if len(str(cell.value)) > max_length:
-                            max_length = len(str(cell.value))
-                    except:
-                        pass
-                adjusted_width = min(max_length + 2, 50)
-                ws.column_dimensions[column_letter].width = adjusted_width
-
-            ws.freeze_panes = 'A2'
-
-        output.seek(0)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M")
-        filename = f"主机黑烟排查表_{timestamp}.xlsx"
+        filename = f"主机黑烟排查表_{timestamp}.csv"
 
-        st.success("✅ Excel 已生成！点击下方按钮下载。")
+        st.success("✅ 排查表已生成！点击下方按钮下载（可用 Excel 直接打开）。")
         st.download_button(
-            label="⬇️ 下载 Excel",
-            data=output,
+            label="⬇️ 下载排查表 (.csv)",
+            data=output.getvalue(),
             file_name=filename,
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            mime="text/csv",
             use_container_width=True,
-            key="download_excel"
+            key="download_csv",
         )
 
     st.markdown("---")
-    st.caption("💡 提示：本表依据 MAN B&W / WinGD / Wärtsilä 主流主机维护规范编制，实际使用请以船级社及设备厂商最新手册为准。")
+    st.caption(
+        "💡 提示：本表依据 MAN B&W / WinGD / Wärtsilä 主流主机维护规范编制，实际使用请以船级社及设备厂商最新手册为准。"
+    )
 
 # ======================
 # 主内容区：对话
