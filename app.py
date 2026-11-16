@@ -300,7 +300,7 @@ if prompt := st.chat_input("描述主机故障现象，例如：主机启动时�
             messages_for_ai.append(msg)
 
     # 调用 AI（双模式：在线流式 / 离线兜底）
-    # 1. 优先尝试在线 AI 流式输出（独立生成器函数）
+    # 1. 优先尝试在线 AI 流式输出
     if api_key and "client" in st.session_state:
         def generate_stream(messages_for_ai):
             try:
@@ -318,10 +318,11 @@ if prompt := st.chat_input("描述主机故障现象，例如：主机启动时�
                 st.session_state.messages.append({"role": "assistant", "content": response})
             except Exception as e:
                 st.error("⚠️ 在线 AI 连接失败，已自动切换至离线规则诊断模式。")
-                # 在线失败后直接降级为离线规则
+                # 在线失败后安全降级为离线规则
                 response = generate_diagnosis(prompt, selected_model)
                 yield response
                 st.session_state.messages.append({"role": "assistant", "content": response})
+
         with st.chat_message("assistant"):
             st.write_stream(generate_stream(messages_for_ai))
 
