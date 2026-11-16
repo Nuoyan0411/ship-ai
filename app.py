@@ -77,7 +77,23 @@ if "messages" not in st.session_state:
 with st.sidebar:
     st.title("⚙️ 主机诊断工具")
     st.markdown("---")
+    # --- AI 设置 ---
+    st.subheader("🤖 AI 设置")
+    api_key = st.text_input("OpenAI API Key", type="password", help="输入你的 OpenAI API Key")
 
+    if api_key:
+        if "client" not in st.session_state or st.session_state.get("_api_key") != api_key:
+            try:
+                from openai import OpenAI
+                st.session_state.client = OpenAI(api_key=api_key)
+                st.session_state["_api_key"] = api_key
+                st.success("API Key 已设置，在线 AI 可用")
+            except Exception as e:
+                st.error(f"API Key 初始化失败：{e}")
+    else:
+        st.info("未填写 API Key，将使用离线规则诊断")
+
+    st.markdown("---")
     # --- 机型选择 ---
     st.subheader("🔧 机型设置")
     selected_model = st.sidebar.radio(
