@@ -229,33 +229,34 @@ if prompt := st.chat_input("描述主机故障现象，例如：主机启动时�
             messages_for_ai.append(msg)
 
     # 调用 AI（双模式：在线流式 / 离线兜底）
-    with st.chat_message("assistant"):
-        # 检查是否有可用的在线 API
-        if api_key and "client" in st.session_state:
+    # 1. 优先尝试在线 AI 流式输出（独立生成器函数）
+    if api_key and "client" in st.session_state:
+        def generate_stream(messages_for_ai):
             try:
-                # 调用在线 AI，并使用生成器实现“打字机”流式输出效果
-                response = ""
                 stream = st.session_state.client.chat.completions.create(
                     model="gpt-4o",
                     messages=messages_for_ai,
                     stream=True
                 )
+                response = ""
                 for chunk in stream:
                     content = chunk.choices[0].delta.content
                     if content:
                         response += content
-                        yield content  # 实现打字机效果
+                        yield content
+                st.session_state.messages.append({"role": "assistant", "content": response})
+            except Exception as e:
+                st.error("⚠️ 在线 AI 连接失败，已自动切换至离线规则诊断模式。")
+                # 在线失败后直接降级为离线规则
+                yield from iter(generate_diagnosis(prompt, selected_model))
                 st.session_state.messages.append({"role": "assistant", "content": response})
 
-            except Exception as e:
-                # 在线调用失败，自动无缝降级到离线规则
-                st.error("⚠️ 在线 AI 连接失败，已自动切换至离线规则诊断模式。")
-                response = generate_diagnosis(prompt, selected_model)
-                st.write(response)
-                st.session_state.messages.append({"role": "assistant", "content": response})
-        
-        else:
-            # 如果没有填入 API Key，直接使用离线规则诊断
-            response = generate_diagnosis(prompt, selected_model)
-            st.write(response)
-            st.session_state.messages.append({"role": "assistant", "content": response})
+        with st.chat_message("assistant"):
+            st.write_stream(generate_stream(messages_for_ai))
+
+    # 2. 在线模式失败或未填写 Key 时，直接输出离线规则
+    else:
+        response = generate_diagnosis(prompt, selected_model)
+        with st.chat_message("assistant"):
+            st.markdown(response)
+        st.session_state.messages.append({"role": "assistant", "content": response})
