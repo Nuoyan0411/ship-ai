@@ -354,3 +354,22 @@ if prompt := st.chat_input("描述主机故障现象，例如：主机启动时�
         with st.chat_message("assistant"):
             st.markdown(response)
         st.session_state.messages.append({"role": "assistant", "content": response})
+    # 【新增】侧边栏专业信息显示
+with st.sidebar:
+    st.markdown("# ⚓️ 系统信息")
+    st.divider()
+    
+    st.markdown("### 🛠️ 技术栈")
+    st.success("Streamlit 前端框架")
+    st.success("OpenAI 智能诊断引擎")
+    st.success("轮机工程领域知识库")
+    
+    st.divider()
+    st.markdown("### 💡 使用指南")
+    st.markdown(
+        "1. 离线模式：使用关键词匹配排查常见故障。\n"
+        "2. 在线模式：直接描述故障现象，AI 将结合大模型给出深度分析与建议。\n"
+        "3. 建议优先使用【导出排查表】功能留存记录。"
+    )
+    st.divider()
+    st.caption(f"当前系统时间：{datetime.now().strftime('%Y-%m-%d %H:%M')}")
