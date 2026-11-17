@@ -1,7 +1,14 @@
+
 import streamlit as st
 import io
-import csv 
+import csv
+
 from datetime import datetime
+
+DEFAULT_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+DEFAULT_MODEL = "qwen-plus"
+
+
 def generate_diagnosis(user_input: str, model_type: str) -> str:
     """离线规则诊断：基于关键词匹配主机故障"""
     # 安全类型转换，防止非字符串输入报错
@@ -118,16 +125,17 @@ def generate_diagnosis(user_input: str, model_type: str) -> str:
         "🔍 **未匹配到具体故障模式**\n"
         "请尝试描述：主机冒黑烟、排气温度高、启动困难、滑油压力低、振动异常等。"
     )
+
+
 # ======================
 # 页面配置
 # ======================
 st.set_page_config(
-    
     page_title=" Ship-AI 船舶主机诊断助手",
     page_icon="⚓️",
     layout="wide",
     initial_sidebar_state="expanded"
-    )
+)
 
 # ======================
 # 初始化对话历史
@@ -151,24 +159,40 @@ with st.sidebar:
     st.markdown("---")
     # --- AI 设置 ---
     st.subheader("🤖 AI 设置")
-    api_key = st.text_input("OpenAI API Key", type="password", help="输入你的 OpenAI API Key")
+    api_key = st.text_input(
+        "API Key（阿里云百炼，sk- 开头）",
+        type="password",
+        help="把你百炼控制台生成的 Key 整串粘贴进来，开头是 sk-，前后不要有空格。"
+    )
+    base_url = st.text_input(
+        "接口地址（一般不用改）",
+        value=DEFAULT_BASE_URL,
+        help="默认国内版地址。若你的 Key 是国际版/新加坡站建的，改成 https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+    )
+    model_name = st.text_input(
+        "模型名",
+        value=DEFAULT_MODEL,
+        help="百炼支持的模型，如 qwen-plus / qwen-flash / qwen-turbo"
+    )
 
     if api_key:
-        if "client" not in st.session_state or st.session_state.get("_api_key") != api_key:
+        cfg_sig = (api_key, base_url)
+        if "client" not in st.session_state or st.session_state.get("_cfg") != cfg_sig:
             try:
                 from openai import OpenAI
-                st.session_state.client = OpenAI(api_key=api_key)
-                st.session_state["_api_key"] = api_key
-                st.success("API Key 已设置，在线 AI 可用")
+                # ★核心修复：这里必须同时告诉它 Key 和「去哪里连」(base_url)，缺一不可
+                st.session_state.client = OpenAI(api_key=api_key, base_url=base_url)
+                st.session_state["_cfg"] = cfg_sig
+                st.success("✅ 客户端已就绪，在线 AI 可用")
             except Exception as e:
-                st.error(f"API Key 初始化失败：{e}")
+                st.error(f"初始化失败：{e}")
     else:
         st.info("未填写 API Key，将使用离线规则诊断")
 
     st.markdown("---")
     # --- 机型选择 ---
     st.subheader("🔧 机型设置")
-    selected_model = st.sidebar.radio(
+    selected_model = st.radio(
         "当前主机型号：",
         ["通用", "MAN B&W MC", "Wärtsilä X-DF", "WinGD X-DF"],
         index=0
@@ -176,7 +200,7 @@ with st.sidebar:
 
     st.markdown("---")
 
-            # --- 一键导出排查表 (CSV版，安全无拦截) ---
+    # --- 一键导出排查表 (CSV版，安全无拦截) ---
     st.subheader("📥 一键导出排查表")
     if st.button("生成并下载", type="primary", use_container_width=True):
         data = {
@@ -303,56 +327,68 @@ if prompt := st.chat_input("描述主机故障现象，例如：主机启动时�
     # 调用 AI（双模式：在线流式 / 离线兜底）
     # 1. 优先尝试在线 AI 流式输出
     if api_key and "client" in st.session_state:
-        def generate_stream(messages_for_ai):
+        def generate_stream(messages_for_ai, user_prompt, m_type, m_name):
+            full = ""
+            degraded = False
             try:
                 stream = st.session_state.client.chat.completions.create(
-                    model="gpt-4o",
+                    model=m_name,
                     messages=messages_for_ai,
                     stream=True
                 )
-                response = ""
                 for chunk in stream:
-                    content = chunk.choices[0].delta.content
-                    if content:
-                        response += content
-                        yield content
-                st.session_state.messages.append({"role": "assistant", "content": response})
+                    delta = chunk.choices[0].delta.content
+                    if delta:
+                        full += delta
+                        yield delta
             except Exception as e:
-                st.error("⚠️ 在线 AI 连接失败，已自动切换至离线规则诊断模式。")
+                # 把真正的报错打印到终端，也显示到页面上，方便排查
+                print(f"【真正的报错是】: {e}")
+                st.session_state["_last_error"] = str(e)
+                degraded = True
+
+            if degraded and not full:
+                st.error("⚠️ 在线 AI 调用失败，已自动切换至离线规则诊断模式。")
+                st.caption(f"（技术细节：{st.session_state.get('_last_error', '')}）")
                 # 在线失败后安全降级为离线规则
-                response = generate_diagnosis(prompt, selected_model)
-                yield response
-                st.session_state.messages.append({"role": "assistant", "content": response})
+                full = generate_diagnosis(user_prompt, m_type)
+                yield full
+
+            # 统一在流结束后写入历史，避免重复记录
+            if full:
+                st.session_state.messages.append({"role": "assistant", "content": full})
 
         with st.chat_message("assistant"):
-            st.write_stream(generate_stream(messages_for_ai))
+            st.write_stream(generate_stream(messages_for_ai, prompt, selected_model, model_name))
 
-    # 2. 在线模式失败或未填写 Key 时，直接输出离线规则
+    # 2. 未填写 Key 时，直接输出离线规则
     else:
         response = generate_diagnosis(prompt, selected_model)
         with st.chat_message("assistant"):
             st.markdown(response)
         st.session_state.messages.append({"role": "assistant", "content": response})
-    # 【新增】侧边栏专业信息显示
+
+# 【侧边栏专业信息显示】
 with st.sidebar:
     st.markdown("# ⚓️ 系统信息")
     st.divider()
-    
+
     st.markdown("### 🛠️ 技术栈")
     st.success("Streamlit 前端框架")
     st.success("OpenAI 智能诊断引擎")
     st.success("轮机工程领域知识库")
-    
+
     st.divider()
     st.markdown("### 💡 使用指南")
     st.markdown(
         "1. 离线模式：使用关键词匹配排查常见故障。\n"
-        "2. 在线模式：直接描述故障现象，AI 将结合大模型给出深度分析与建议。\n"
+        "2. 在线模式：在侧边栏填好 API Key，直接描述故障现象，AI 将结合大模型给出深度分析与建议。\n"
         "3. 建议优先使用【导出排查表】功能留存记录。"
     )
     st.divider()
     st.caption(f"当前系统时间：{datetime.now().strftime('%Y-%m-%d %H:%M')}")
-    # 【新增】对话记录导出功能
+
+# 【对话记录导出功能】
 st.divider()
 st.subheader("📝 导出本次对话记录")
 
@@ -361,11 +397,11 @@ export_text = "Ship-AI 轮机故障诊断记录\n" + "="*30 + "\n\n"
 if "messages" in st.session_state:
     for i, msg in enumerate(st.session_state.messages):
         if msg["role"] == "system":
-            continue                                        
+            continue
         elif msg["role"] == "user":
             role = "用户"
         else:
-            role = "助手"                                  
+            role = "助手"
         export_text += f"[{role}]: {msg['content']}\n\n"
 else:
     export_text += "暂无对话记录。\n"
