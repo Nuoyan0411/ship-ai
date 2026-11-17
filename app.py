@@ -1,9 +1,6 @@
 import streamlit as st
 import io
-import csv
-st.title("⚓️ Ship-AI 轮机工程故障智能诊断系统")
-st.markdown("基于大模型技术，助力轮机设备高效、安全排查")
-st.divider()  # 加一条分割线，让排版更清晰
+import csv 
 from datetime import datetime
 def generate_diagnosis(user_input: str, model_type: str) -> str:
     """离线规则诊断：基于关键词匹配主机故障"""
@@ -125,11 +122,12 @@ def generate_diagnosis(user_input: str, model_type: str) -> str:
 # 页面配置
 # ======================
 st.set_page_config(
-    page_title="船舶主机诊断助手",
-    page_icon="⚙️",
+    
+    page_title=" Ship-AI 船舶主机诊断助手",
+    page_icon="⚓️",
     layout="wide",
     initial_sidebar_state="expanded"
-)
+    )
 
 # ======================
 # 初始化对话历史
@@ -362,7 +360,12 @@ st.subheader("📝 导出本次对话记录")
 export_text = "Ship-AI 轮机故障诊断记录\n" + "="*30 + "\n\n"
 if "messages" in st.session_state:
     for i, msg in enumerate(st.session_state.messages):
-        role = "用户" if msg["role"] == "user" else "系统"
+        if msg["role"] == "system":
+            continue                                        
+        elif msg["role"] == "user":
+            role = "用户"
+        else:
+            role = "助手"                                  
         export_text += f"[{role}]: {msg['content']}\n\n"
 else:
     export_text += "暂无对话记录。\n"
