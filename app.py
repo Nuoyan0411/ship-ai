@@ -25,6 +25,8 @@ st.markdown("""
 """, unsafe_allow_html=True)
 from datetime import datetime
 def generate_diagnosis(user_input: str, model_type: str) -> str:
+    st.markdown('<div class="header-container"><h1>Ship-AI 轮机工程故障智能诊断系统</h1><p>基于大模型技术，助力轮机设备高效、安全排查</p></div>', unsafe_allow_html=True)
+    st.divider()
     """离线规则诊断：基于关键词匹配主机故障"""
     # 安全类型转换，防止非字符串输入报错
     text = str(user_input).lower()
