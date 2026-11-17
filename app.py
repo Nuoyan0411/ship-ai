@@ -1,32 +1,11 @@
 import streamlit as st
 import io
 import csv
-from datetime import datetime
-import streamlit as st # 确保 st 在最前面
-
-# 【新增】全局页面美化配置
-st.set_page_config(
-    page_title="Ship-AI 轮机故障诊断系统",
-    page_icon="🚢",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
-
-# 【新增】注入自定义 CSS 样式
-st.markdown("""
-<style>
-    /* 整体背景微调 */
-    .stApp { background-color: #f8f9fa; }
-    /* 顶部大标题样式 */
-    .header-container { padding: 1rem 0 1.5rem 0; text-align: center; }
-    .header-container h1 { font-size: 2.8rem; color: #1e88e5; margin-bottom: 0.5rem; }
-    .header-container p { font-size: 1.1rem; color: #546e7a; }
-</style>
-""", unsafe_allow_html=True)
+st.title("⚓️ Ship-AI 轮机工程故障智能诊断系统")
+st.markdown("基于大模型技术，助力轮机设备高效、安全排查")
+st.divider()  # 加一条分割线，让排版更清晰
 from datetime import datetime
 def generate_diagnosis(user_input: str, model_type: str) -> str:
-    st.markdown('<div class="header-container"><h1>Ship-AI 轮机工程故障智能诊断系统</h1><p>基于大模型技术，助力轮机设备高效、安全排查</p></div>', unsafe_allow_html=True)
-    st.divider()
     """离线规则诊断：基于关键词匹配主机故障"""
     # 安全类型转换，防止非字符串输入报错
     text = str(user_input).lower()
