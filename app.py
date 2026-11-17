@@ -354,3 +354,25 @@ with st.sidebar:
     )
     st.divider()
     st.caption(f"当前系统时间：{datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    # 【新增】对话记录导出功能
+st.divider()
+st.subheader("📝 导出本次对话记录")
+
+# 收集对话历史
+export_text = "Ship-AI 轮机故障诊断记录\n" + "="*30 + "\n\n"
+if "messages" in st.session_state:
+    for i, msg in enumerate(st.session_state.messages):
+        role = "用户" if msg["role"] == "user" else "系统"
+        export_text += f"[{role}]: {msg['content']}\n\n"
+else:
+    export_text += "暂无对话记录。\n"
+
+export_text += f"\n导出时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+
+# 生成并下载按钮
+st.download_button(
+    label="📥 下载对话记录 (txt)",
+    data=export_text,
+    file_name=f"Ship-AI_Diagnosis_Record_{datetime.now().strftime('%Y%m%d')}.txt",
+    mime="text/plain"
+)
