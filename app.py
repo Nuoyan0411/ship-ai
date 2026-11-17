@@ -1,4 +1,5 @@
 
+
 import streamlit as st
 import io
 import csv
@@ -136,6 +137,84 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# 注入「深海航海」主题 CSS（仅美化外观，不动任何逻辑）
+st.markdown("""
+<style>
+/* ===================== 深海航海主题 Ship-AI ===================== */
+.stApp, [data-testid="stAppViewContainer"] {
+    background: radial-gradient(circle at 20% -10%, #14417a 0%, #0b2545 55%, #05121f 100%) !important;
+}
+[data-testid="stAppViewContainer"] > .main { background: transparent !important; }
+header[data-testid="stHeader"] { background: transparent !important; }
+html, body, [class*="css"] { color: #dbeafe !important; }
+
+/* 侧边栏：深色玻璃面板 */
+[data-testid="stSidebar"] {
+    background: linear-gradient(180deg, #0a2140 0%, #06162a 100%) !important;
+    border-right: 1px solid rgba(56,189,248,.35) !important;
+}
+[data-testid="stSidebar"] * { color: #e0f2fe !important; }
+
+/* 输入框 / 密码框 */
+[data-testid="stTextInput"] input, [data-testid="stTextInput"] [data-baseweb="input"] > div {
+    background: rgba(2,20,40,.55) !important;
+    border: 1px solid rgba(56,189,248,.4) !important;
+    color: #e0f2fe !important;
+    border-radius: 10px !important;
+}
+
+/* 主按钮：渐变蓝 + 悬停上浮 */
+.stButton > button, [data-testid="stDownloadButton"] > button, .stFormSubmitButton > button {
+    background: linear-gradient(135deg, #0284c7, #38bdf8) !important;
+    border: none !important;
+    color: #ffffff !important;
+    border-radius: 12px !important;
+    padding: .6rem 1.1rem !important;
+    font-weight: 700 !important;
+    box-shadow: 0 4px 14px rgba(56,189,248,.35) !important;
+    transition: transform .18s ease, box-shadow .18s ease !important;
+}
+.stButton > button:hover, [data-testid="stDownloadButton"] > button:hover {
+    transform: translateY(-3px) !important;
+    box-shadow: 0 9px 24px rgba(56,189,248,.6) !important;
+}
+
+/* 对话输入框 */
+[data-testid="stChatInput"] textarea {
+    background: rgba(2,20,40,.6) !important;
+    border: 1px solid rgba(56,189,248,.5) !important;
+    color: #e0f2fe !important;
+    border-radius: 14px !important;
+}
+
+/* 聊天气泡：毛玻璃卡片 */
+[data-testid="stChatMessage"] {
+    background: rgba(13,42,74,.55) !important;
+    backdrop-filter: blur(6px);
+    border: 1px solid rgba(56,189,248,.25) !important;
+    border-radius: 16px !important;
+    padding: .9rem 1.1rem !important;
+    margin-bottom: .8rem !important;
+}
+
+/* 提示条 */
+[data-testid="stAlert"] { border-radius: 12px !important; }
+
+/* Hero 标题横幅 */
+.ship-hero {
+    background: linear-gradient(120deg, rgba(2,132,199,.92), rgba(56,189,248,.6));
+    border: 1px solid rgba(125,211,252,.5);
+    border-radius: 18px;
+    padding: 1.4rem 1.6rem;
+    box-shadow: 0 10px 30px rgba(2,20,40,.5);
+    color: #f0f9ff;
+    margin-bottom: 1.1rem;
+}
+.ship-hero .t { font-size: 2rem; font-weight: 800; letter-spacing: 1px; margin: 0; }
+.ship-hero .s { margin: .4rem 0 0; opacity: .92; font-size: 1.05rem; }
+</style>
+""", unsafe_allow_html=True)
 
 # ======================
 # 初始化对话历史
@@ -298,7 +377,15 @@ with st.sidebar:
 # ======================
 # 主内容区：对话
 # ======================
-st.title("🚢 船舶主机智能诊断助手")
+st.markdown(
+    """
+    <div class="ship-hero">
+        <div class="t">⚓️ 船舶主机智能诊断助手</div>
+        <div class="s">🛠️ 在线大模型 + 离线规则双引擎 · 为轮机员提供专业故障诊断</div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
 # 显示历史消息（跳过 system）
 for msg in st.session_state.messages:
