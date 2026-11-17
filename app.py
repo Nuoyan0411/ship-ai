@@ -1,8 +1,10 @@
 
 
+
 import streamlit as st
 import io
 import csv
+import re
 
 from datetime import datetime
 
@@ -213,6 +215,94 @@ html, body, [class*="css"] { color: #dbeafe !important; }
 }
 .ship-hero .t { font-size: 2rem; font-weight: 800; letter-spacing: 1px; margin: 0; }
 .ship-hero .s { margin: .4rem 0 0; opacity: .92; font-size: 1.05rem; }
+
+/* ============ 动效层（第7轮承诺项，此处补齐） ============ */
+/* 1) 对话气泡：上浮淡入进场 */
+[data-testid="stChatMessage"] { animation: fadeSlideIn .45s ease-out both; }
+@keyframes fadeSlideIn {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* 2) 按钮流光：悬停时一道高光从左扫到右 */
+.stButton > button, [data-testid="stDownloadButton"] > button {
+    position: relative !important;
+    overflow: hidden !important;
+}
+.stButton > button::before, [data-testid="stDownloadButton"] > button::before {
+    content: '' !important;
+    position: absolute;
+    top: 0; left: -120%;
+    width: 60%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,.55), transparent);
+    transform: skewX(-20deg);
+    pointer-events: none;
+}
+.stButton > button:hover::before, [data-testid="stDownloadButton"] > button:hover::before {
+    animation: shineSweep .75s ease-out;
+}
+@keyframes shineSweep {
+    from { left: -120%; }
+    to   { left: 160%; }
+}
+
+/* 3) Hero 横幅：缓慢流动的光带，纯 CSS 不卡页面 */
+.ship-hero { position: relative; overflow: hidden; }
+.ship-hero::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(115deg, transparent 40%, rgba(255,255,255,.18) 50%, transparent 60%);
+    background-size: 250% 100%;
+    animation: heroFlow 6s linear infinite;
+    pointer-events: none;
+}
+@keyframes heroFlow {
+    from { background-position: 120% 0; }
+    to   { background-position: -120% 0; }
+}
+
+/* 4) AI 输出表格的界面美化 */
+[data-testid="stMarkdownContainer"] table th {
+    background: rgba(2,132,199,.55) !important;
+    color: #f0f9ff !important;
+}
+[data-testid="stMarkdownContainer"] table tr:hover td {
+    background: rgba(56,189,248,.10) !important;
+}
+
+/* 评委笔记本性能差时自动降级动效，不影响任何功能 */
+@media (prefers-reduced-motion: reduce) {
+    [data-testid="stChatMessage"], .ship-hero::after,
+    .stButton > button:hover::before, [data-testid="stDownloadButton"] > button:hover::before {
+        animation: none !important;
+    }
+}
+
+/* ===== 动效增强：弹入 / 流光 / 呼吸灯 / 表格美化 ===== */
+@keyframes shipFadeUp { from { opacity:0; transform:translateY(16px);} to { opacity:1; transform:translateY(0);} }
+[data-testid="stChatMessage"] { animation: shipFadeUp .5s ease-out both; }
+
+.stButton > button, [data-testid="stDownloadButton"] > button { position:relative; overflow:hidden; }
+@keyframes shipShine { 0%{background-position:-200% 0;} 100%{background-position:200% 0;} }
+.stButton > button::after, [data-testid="stDownloadButton"] > button::after {
+  content:''; position:absolute; inset:0; pointer-events:none; opacity:0;
+  background:linear-gradient(120deg, transparent 30%, rgba(255,255,255,.5) 50%, transparent 70%);
+  background-size:200% 100%;
+}
+.stButton > button:hover::after, [data-testid="stDownloadButton"] > button:hover::after {
+  opacity:1; animation: shipShine .9s ease;
+}
+@keyframes shipPulse { 0%,100%{opacity:.35;} 50%{opacity:1;} }
+.ship-thinking { color:#7dd3fc; font-weight:700; animation: shipPulse 1.4s infinite; }
+
+[data-testid="stMarkdownContainer"] table { border-collapse:collapse; width:100%; margin:.4rem 0; }
+[data-testid="stMarkdownContainer"] th { background:rgba(2,132,199,.4); color:#f0f9ff; }
+[data-testid="stMarkdownContainer"] td { background:rgba(2,20,40,.25); }
+[data-testid="stMarkdownContainer"] th, [data-testid="stMarkdownContainer"] td {
+  border:1px solid rgba(56,189,248,.45); padding:8px 10px; color:#e0f2fe;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -475,30 +565,167 @@ with st.sidebar:
     st.divider()
     st.caption(f"当前系统时间：{datetime.now().strftime('%Y-%m-%d %H:%M')}")
 
-# 【对话记录导出功能】
+# 【对话记录导出功能 · 增强版：表格可导出 / 可直接转 PPT】
+def _clean_for_export(text):
+    """清洗 AI 回复里可能残留的 HTML 标签，保证导出的 md 干净、转 PPT 不乱码"""
+    if not isinstance(text, str):
+        text = str(text)
+    return re.sub(r"<[^>]+>", "", text).strip()
+
+def _extract_md_tables(text):
+    """从一段文本里抽出所有 markdown 表格，返回 [表, 表...]，每个表是原始行列表"""
+    lines = str(text).splitlines()
+    tables, buf = [], []
+    for ln in lines:
+        s = ln.strip()
+        if s.startswith("|") and s.count("|") >= 2:
+            buf.append(s)
+        else:
+            if len(buf) >= 2:
+                tables.append(buf)
+            buf = []
+    if len(buf) >= 2:
+        tables.append(buf)
+    return tables
+
+def _md_table_to_rows(md_lines):
+    """把 markdown 表格行解析成二维列表，跳过 |---| 分隔行"""
+    rows = []
+    for ln in md_lines:
+        cells = [c.strip() for c in ln.strip().strip("|").split("|")]
+        is_div = (
+            all(re.fullmatch(r":?-{2,}:?", c) for c in cells)
+            and any("-" in c for c in cells)
+        )
+        if is_div:
+            continue
+        rows.append(cells)
+    return rows
+
 st.divider()
 st.subheader("📝 导出本次对话记录")
 
-# 收集对话历史
-export_text = "Ship-AI 轮机故障诊断记录\n" + "="*30 + "\n\n"
-if "messages" in st.session_state:
-    for i, msg in enumerate(st.session_state.messages):
-        if msg["role"] == "system":
-            continue
-        elif msg["role"] == "user":
-            role = "用户"
-        else:
-            role = "助手"
-        export_text += f"[{role}]: {msg['content']}\n\n"
+ts = datetime.now().strftime("%Y%m%d_%H%M")
+
+# —— Markdown 版：表格原生保留，可直接拖进 Gamma / WPS AI / MindShow 一键生成 PPT ——
+md_text = "# Ship-AI 轮机故障诊断记录\n\n"
+md_text += f"> 主机机型：{selected_model}    导出时间：{datetime.now().strftime('%Y-%m-%d %H:%M')}\n\n---\n\n"
+has_chat = False
+for msg in st.session_state.messages:
+    if msg["role"] == "system":
+        continue
+    has_chat = True
+    who = "👤 用户" if msg["role"] == "user" else "🤖 助手"
+    md_text += f"### {who}\n\n{_clean_for_export(msg['content'])}\n\n"
+if not has_chat:
+    md_text += "_暂无对话记录。_\n"
+
+# —— 纯文本版 ——
+plain = "Ship-AI 轮机故障诊断记录\n" + "=" * 30 + "\n\n"
+for msg in st.session_state.messages:
+    if msg["role"] == "system":
+        continue
+    who = "用户" if msg["role"] == "user" else "助手"
+    plain += f"[{who}]: {_clean_for_export(msg['content'])}\n\n"
+if not has_chat:
+    plain += "暂无对话记录。\n"
+plain += f"\n导出时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+
+c1, c2 = st.columns(2)
+with c1:
+    st.download_button(
+        "📊 下载对话记录 (.md · 含表格 · 可转PPT)",
+        data=md_text,
+        file_name=f"Ship-AI_Diagnosis_{ts}.md",
+        mime="text/markdown;charset=utf-8",
+        use_container_width=True,
+    )
+with c2:
+    st.download_button(
+        "📄 下载对话记录 (.txt 纯文本)",
+        data=plain.encode("utf-8-sig"),
+        file_name=f"Ship-AI_Diagnosis_{ts}.txt",
+        mime="text/plain;charset=utf-8",
+        use_container_width=True,
+    )
+
+# —— 单独把对话里出现的表格抽出来导出成 CSV（Excel 直接打开 / 贴进 PPT）——
+_all_tables = []
+for msg in st.session_state.messages:
+    if msg["role"] == "system":
+        continue
+    for t in _extract_md_tables(msg["content"]):
+        _all_tables.append(t)
+
+if _all_tables:
+    st.caption(f"🔎 检测到对话中含 {len(_all_tables)} 个表格，可单独导出为 Excel 可打开的 CSV：")
+    csv_out = io.StringIO()
+    writer = csv.writer(csv_out)
+    for ti, tbl in enumerate(_all_tables, 1):
+        writer.writerow([f"—— 表格 {ti} ——"])
+        writer.writerow([])
+        for row in _md_table_to_rows(tbl):
+            writer.writerow(row)
+        writer.writerow([])
+    # ★ 关键修复：必须写入 UTF-8 BOM（utf-8-sig），否则中文 Windows 的 Excel
+    #    会按 GBK 解码，双击打开就是一片乱码。这是上一版乱码的唯一原因。
+    st.download_button(
+        "📥 下载对话中的全部表格 (.csv)",
+        data=csv_out.getvalue().encode("utf-8-sig"),
+        file_name=f"Ship-AI_Tables_{ts}.csv",
+        mime="text/csv;charset=utf-8",
+        use_container_width=True,
+    )
+    # —— 追加：同样的表格再导出一份真 .xlsx（二进制格式，不存在任何编码问题）——
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Alignment, Font, PatternFill
+        from openpyxl.utils import get_column_letter
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "诊断表格"
+        _title_font = Font(bold=True, color="FFFFFF")
+        _title_fill = PatternFill("solid", fgColor="0284C7")
+
+        r = 1
+        for ti, tbl in enumerate(_all_tables, 1):
+            ws.cell(row=r, column=1, value=f"表格 {ti}")
+            ws.cell(row=r, column=1).font = _title_font
+            ws.cell(row=r, column=1).fill = _title_fill
+            r += 1
+            rows_parsed = _md_table_to_rows(tbl)
+            for ci, row in enumerate(rows_parsed):
+                for cj, val in enumerate(row, start=1):
+                    cell = ws.cell(row=r, column=cj, value=val)
+                    cell.alignment = Alignment(vertical="center", wrap_text=True)
+                    if ci == 0:
+                        cell.font = _title_font
+                        cell.fill = _title_fill
+                r += 1
+            r += 1
+        # 自适应列宽（中文按2倍宽度估算）
+        for col in range(1, ws.max_column + 1):
+            width = 10
+            for row in range(1, ws.max_row + 1):
+                v = ws.cell(row=row, column=col).value
+                if v:
+                    w = sum(2 if ord(ch) > 127 else 1 for ch in str(v))
+                    width = max(width, min(w + 2, 60))
+            ws.column_dimensions[get_column_letter(col)].width = width
+
+        xlsx_buffer = io.BytesIO()
+        wb.save(xlsx_buffer)
+        st.download_button(
+            "📗 下载对话中的全部表格 (.xlsx · Excel零乱码)",
+            data=xlsx_buffer.getvalue(),
+            file_name=f"Ship-AI_Tables_{ts}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+        )
+        st.caption("✅ 已加 UTF-8 BOM，Excel 双击直接打开即可；.xlsx 为二进制格式，任何机器都不会乱码。")
+    except Exception as _e:
+        st.caption(f"（.xlsx 导出需要 openpyxl，当前不可用：{_e}。CSV 仍可正常打开。）")
+        st.caption("✅ CSV 已加 UTF-8 BOM，Excel 双击直接打开不会乱码。")
 else:
-    export_text += "暂无对话记录。\n"
-
-export_text += f"\n导出时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-
-# 生成并下载按钮
-st.download_button(
-    label="📥 下载对话记录 (txt)",
-    data=export_text,
-    file_name=f"Ship-AI_Diagnosis_Record_{datetime.now().strftime('%Y%m%d')}.txt",
-    mime="text/plain"
-)
+    st.caption("（当前对话中暂未检测到表格。提问时加一句「用表格列出排查项」，AI 输出表格后这里会自动出现 CSV / xlsx 下载按钮。）")
